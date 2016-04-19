@@ -4,6 +4,7 @@ from __future__ import absolute_import
 from __future__ import division
 from urllib.parse import urlencode
 import six
+from cached_property import cached_property
 from werkzeug.exceptions import BadRequest
 
 
@@ -17,7 +18,7 @@ class SQLAlchemyPaginator(object):
 
     MAX_LIMIT = 100
 
-    def __init__(self, request_data, query=None, resource_uri=None,
+    def __init__(self, request_data, resource_uri=None,
                  max_limit=None):
         """
 
@@ -30,11 +31,11 @@ class SQLAlchemyPaginator(object):
         :return:
         """
         self.request_data = request_data
-        self.query = query
         self.resource_uri = resource_uri
         self.max_limit = [max_limit or self.MAX_LIMIT]
 
-    def get_limit(self):
+    @cached_property
+    def limit(self):
         # request_data.get('limit') -> returns a list
         limit = self.request_data.get('limit', self.max_limit)[0]
 
@@ -51,104 +52,114 @@ class SQLAlchemyPaginator(object):
         if self.max_limit and (not limit or limit > self.max_limit):
             # If it's more than the max, we're only going to return the max.
             # This is to prevent excessive DB (or other) load.
-            return self.max_limit
+            limit = self.max_limit
 
         return limit
 
-    def get_offset(self):
-            """
-            Determines the proper starting offset of results to return.
-            It attempts to use the user-provided ``offset`` from the GET parameters,
-            if specified. Otherwise, it falls back to the object-level ``offset``.
-            Default is 0.
-            """
-            offset = self.request_data.get('offset', [0])[0]
+    @cached_property
+    def offset(self):
+        """
+        Determines the proper starting offset of results to return.
+        It attempts to use the user-provided ``offset`` from the GET parameters,
+        if specified. Otherwise, it falls back to the object-level ``offset``.
+        Default is 0.
+        """
+        offset = self.request_data.get('offset', [0])[0]
 
-            try:
-                offset = int(offset)
-            except ValueError:
-                raise BadRequest("Invalid offset '%s' provided. "
-                                 "Please provide an integer." % offset)
+        try:
+            offset = int(offset)
+        except ValueError:
+            raise BadRequest("Invalid offset '%s' provided. "
+                             "Please provide an integer." % offset)
 
-            if offset < 0:
-                raise BadRequest("Invalid offset '%s' provided. Please provide "
-                                 "a positive integer >= 0." % offset)
+        if offset < 0:
+            raise BadRequest("Invalid offset '%s' provided. Please provide "
+                             "a positive integer >= 0." % offset)
 
-            return offset
+        return offset
 
-    def get_sliced_query(self, limit, offset):
+    @cached_property
+    def count(self):
+        if self.query:
+            return self.query.count()
+        else:
+            return 0
+
+    def get_sliced_query(self):
         """
         Slices the result set to the specified ``limit`` & ``offset``.
         """
-        if limit == 0:
-            return self.query.offset(offset)
+        query = self.query
+        if self.offset:
+            query = query.offset(self.offset)
 
-        return self.query.offset(offset).limit(limit)
+        if self.limit:
+            return query.limit(self.limit)
 
-    def get_previous(self, limit, offset):
+    def get_previous(self):
         """
         If a previous page is available, will generate a URL to request that
         page. If not available, this returns ``None``.
         """
-        if offset - limit < 0:
+        if self.offset - self.limit < 0:
             return None
 
-        return self._generate_uri(limit, offset - limit)
+        return self._generate_uri()
 
-    def get_next(self, limit, offset, count=None):
+    def get_next(self):
         """
         If a next page is available, will generate a URL to request that
         page. If not available, this returns ``None``.
         """
 
-        if count and offset + limit >= count:
+        if self.count and self.offset + self.limit >= self.count:
             return None
 
-        return self._generate_uri(limit, offset+limit)
+        return self._generate_uri()
 
-    def _generate_uri(self, limit, offset):
+    def _generate_uri(self):
         if self.resource_uri is None:
             return None
 
         request_params = {}
 
         for k, v in self.request_data.items():
-            if isinstance(v, six.text_type):
+            if isinstance(v, compat.text_type):
                 request_params[k] = v.encode('utf-8')
             else:
                 request_params[k] = v
 
-        request_params.update({'limit': limit, 'offset': offset})
+        request_params.update({'limit': self.limit, 'offset': self.offset})
         encoded_params = urlencode(request_params, doseq=True)
 
         return '%s?%s' % (self.resource_uri, encoded_params)
 
-    def get_meta(self, object_count):
-        limit = self.get_limit()
-        offset = self.get_offset()
+    def get_meta(self):
         meta = {
-            'offset': offset,
-            'limit': limit,
-            'count': object_count
+            'offset': self.offset,
+            'limit': self.limit,
+            'count': self.count
         }
-
-        if limit:
-            meta['previous'] = self.get_previous(limit, offset)
-            meta['next'] = self.get_next(limit, offset) \
-                if object_count >= limit else None
 
         return meta
 
-    def page(self):
+    def _set_query(self, query):
+        self.query = query
+        if 'count' in self.__dict__:
+            del self.__dict__['count']
+
+        # memoize count
+        count = self.count
+
+    def page(self, query):
         """
         Generates all pertinent data about the requested page.
         Handles getting the correct ``limit`` & ``offset``, then slices off
         the correct set of results and returns all pertinent metadata.
         """
-        if not self.query:
+        if not query:
             raise ValueError('Query object cannot be empty')
 
-        limit = self.get_limit()
-        offset = self.get_offset()
-        query = self.get_sliced_query(limit, offset)
+        self._set_query(query)
+        query = self.get_sliced_query()
         return query

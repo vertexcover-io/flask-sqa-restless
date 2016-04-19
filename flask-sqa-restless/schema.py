@@ -57,6 +57,10 @@ class BaseModelSchema(ModelSchema):
         kwargs['exclude'] = ()
         super().__init__(*args, **kwargs)
 
+    def dumps(self, obj, many=None, update_fields=True, *args, **kwargs):
+        kwargs['cls'] = self.opts.json_encoder
+        return super().dumps(obj, many, update_fields, *args, **kwargs)
+
     def include_fields_serialize(self, include_fields):
         """
         Set a list/tuple of fields to serialize. If include_fields is `[*]`,

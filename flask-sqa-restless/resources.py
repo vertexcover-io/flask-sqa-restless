@@ -147,21 +147,12 @@ class FlaskSQAResource(FlaskResource):
     def request_querystring(self):
         return self.request.args.to_dict(flat=False)
 
-    def wrap_list_response(self, objects):
+    def wrap_list_response(self, data):
 
         if not self.paginator_cls:
-            meta = {}
+            return MetaListResponse(data)
         else:
-            paginator = self.paginator_cls(self.request_querystring(),
-                                           resource_uri=self.request.base_url,
-                                           max_limit=self.MAX_LIMIT)
-
-            meta = paginator.get_meta(len(objects))
-
-        return {
-            'meta': meta,
-            'object': self.serializer.serialize_model(objects)
-        }
+            return MetaListResponse(data, self.paginator.get_meta())
 
     def serialize(self, method, endpoint, data):
         qs = self.request_querystring()
@@ -173,7 +164,15 @@ class FlaskSQAResource(FlaskResource):
         elif self.exclude_fields:
             self.serializer.exclude_fields_serialize(self.exclude_fields)
 
-        return super(FlaskSQAResource, self).serialize(method, endpoint, data)
+        if endpoint == 'list' or isinstance(data, list):
+            # Create is a special-case, because you POST it to the collection,
+            # not to a detail.
+            if method == 'POST':
+                return self.serialize_detail(data)
+
+            return self.serialize_list(data)
+
+        return self.serialize_detail(data)
 
     def is_authenticated(self):
         return self.authentication. \
@@ -392,6 +391,12 @@ class FlaskSQAResource(FlaskResource):
             self.data = self.deserialize(method, endpoint, self.request_body())
             self.check_authorization(self.http_methods[endpoint][method],
                                      self.data, *args, **kwargs)
+
+            if self.paginator_cls:
+                self.paginator = self.paginator_cls(self.request_querystring(),
+                                                    resource_uri=self.request.base_url,
+                                                    max_limit=self.MAX_LIMIT)
+
             view_method = getattr(self, self.http_methods[endpoint][method])
             data = view_method(*args, **kwargs)
             serialized = self.serialize(method, endpoint, data)
@@ -569,28 +574,24 @@ class FlaskSQAResource(FlaskResource):
         if not self.paginator_cls:
             return query
 
-        paginator = self.paginator_cls(self.request_querystring(), query,
-                                       resource_uri=self.request.base_url,
-                                       max_limit=self.MAX_LIMIT)
-
-        return paginator.page()
+        return self.paginator.page(query)
 
     def apply_sorting(self, query):
         options = self.request_querystring()
 
-        if not 'order_by' in options:
+        if 'order_by' not in options:
             return query
 
         for order_by in options['order_by']:
             if order_by.startswith('-'):
-                field_name = order_by[1:]
-                order = 'desc'
-
+                field = order_by[1:]
             else:
-                field_name = order_by
-                order = 'asc'
+                field = order_by
 
-            if field_name not in self.schema.fields:
+            filter_parts = field.split('__')
+            field_name = filter_parts[0]
+
+            if field_name not in self.schema.fields and field_name not in self.model.relationships():
                 raise BadRequest("No matching '%s' field for ordering on."
                                  % field_name)
 
@@ -598,9 +599,7 @@ class FlaskSQAResource(FlaskResource):
                 raise BadRequest("This '%s' field does not allow ordering"
                                  % field_name)
 
-            attribute = getattr(getattr(self.model, field_name), order)()
-
-            query = query.order_by(attribute)
+            query = query.order_by(order_by)
 
         return query
 
@@ -613,8 +612,8 @@ class FlaskSQAResource(FlaskResource):
         ``ALL_WITH_RELATIONS`` constant.
         """
         # At the declarative level:
-        # filtering = {
-        # 'resource_field_name': ['exact', 'startswith', 'endswith', 'contains'],
+        #     filtering = {
+        #         'resource_field_name': ['exact', 'startswith', 'endswith', 'contains'],
         #         'resource_field_name_2': ['exact', 'gt', 'gte', 'lt', 'lte', 'range'],
         #         'resource_field_name_3': ALL,
         #         'resource_field_name_4': ALL_WITH_RELATIONS,
@@ -627,9 +626,19 @@ class FlaskSQAResource(FlaskResource):
         filters = dict(kwargs)
 
         for filter_expr, value in qs.items():
+            custom_filtering_handler = self.custom_filtering.get(filter_expr)
+            if isinstance(custom_filtering_handler, compat.basestring):
+                custom_filtering_handler = getattr(self,
+                                                   custom_filtering_handler)
+
+            if custom_filtering_handler is not None and callable(
+                    custom_filtering_handler):
+                query = custom_filtering_handler(query, qs, value)
+                continue
+
             filter_bits = filter_expr.rsplit('__', 1)
 
-            if filter_bits[-1] not in self.QUERY_CLASS.OPERATORS:
+            if filter_bits[-1] not in DjangoQuery.OPERATORS:
                 filter_type = 'exact'
                 complete_field = '__'.join(filter_bits)
             else:
