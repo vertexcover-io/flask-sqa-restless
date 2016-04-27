@@ -2,7 +2,7 @@
 
 from __future__ import absolute_import
 from __future__ import division
-from urllib.parse import urlencode
+from six.moves.urllib.parse import urlencode
 import six
 from cached_property import cached_property
 from werkzeug.exceptions import BadRequest
@@ -124,7 +124,7 @@ class SQLAlchemyPaginator(object):
         request_params = {}
 
         for k, v in self.request_data.items():
-            if isinstance(v, compat.text_type):
+            if isinstance(v, six.text_type):
                 request_params[k] = v.encode('utf-8')
             else:
                 request_params[k] = v

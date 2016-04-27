@@ -13,12 +13,14 @@ from flask import make_response, request
 from restless.fl import FlaskResource
 from restless.utils import format_traceback
 import six
+from six import wraps
 from sqlalchemy import orm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import NoResultFound
 import sys
 from werkzeug.exceptions import Unauthorized, MethodNotAllowed
 
+from flask.ext.sqa_restless.djquery import DjangoQuery
 from .authentication import Authentication
 from .paginator import SQLAlchemyPaginator
 from .exceptions import *
@@ -26,6 +28,21 @@ from . import util, djquery
 
 
 ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
+
+
+def db_http_wrapper(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except IntegrityError as ex:
+            db_error = get_database_error(ex)
+            db_error.raise_http_error()
+
+        except HttpErrorConvertible as ex:
+            ex.raise_http_error()
+
+    return wrapper
 
 
 class FlaskSQAResource(FlaskResource):
@@ -58,8 +75,6 @@ class FlaskSQAResource(FlaskResource):
     MAX_LIMIT = 100
 
     detail_uri_identifier = 'pk'
-
-    schema_cls = None
 
     model = None
 
@@ -147,12 +162,11 @@ class FlaskSQAResource(FlaskResource):
     def request_querystring(self):
         return self.request.args.to_dict(flat=False)
 
-    def wrap_list_response(self, data):
-
-        if not self.paginator_cls:
-            return MetaListResponse(data)
-        else:
-            return MetaListResponse(data, self.paginator.get_meta())
+    def wrap_list_response(self, objects):
+        return {
+            'meta': self.paginator.get_meta() if self.paginator_cls else {},
+            'object': self.serializer.serialize_model(objects)
+        }
 
     def serialize(self, method, endpoint, data):
         qs = self.request_querystring()
@@ -409,32 +423,32 @@ class FlaskSQAResource(FlaskResource):
     def check_authorization(self, view_method, data, *args, **kwargs):
         return True
 
-    @util.db_http_wrapper
+    @db_http_wrapper
     def create(self, *args, **kwargs):
         return self.obj_create(self.data)
 
-    @util.db_http_wrapper
+    @db_http_wrapper
     def list(self, *args, **kwargs):
         return self.obj_get_list(**kwargs)
 
-    @util.db_http_wrapper
+    @db_http_wrapper
     def count(self, *args, **kwargs):
         count = self.obj_get_list(count_only=True, **kwargs)
         return {'total_count': count}
 
-    @util.db_http_wrapper
+    @db_http_wrapper
     def detail(self, *args, **kwargs):
         return self.obj_get(**kwargs)
 
-    @util.db_http_wrapper
+    @db_http_wrapper
     def update(self, *args, **kwargs):
         return self.obj_update(self.data, **kwargs)
 
-    @util.db_http_wrapper
+    @db_http_wrapper
     def delete(self, *args, **kwargs):
         self.obj_delete(**kwargs)
 
-    @util.db_http_wrapper
+    @db_http_wrapper
     def create_or_update(self, *args, **kwargs):
         return self.obj_create_or_update(self.data, **kwargs)
 
@@ -496,8 +510,8 @@ class FlaskSQAResource(FlaskResource):
         return data.get('id', None) is not None
 
     def _bulk_save(self, op_name, object_list):
-        obj_create = util.db_http_wrapper(self.obj_create)
-        multi_update = util.db_http_wrapper(self.obj_update_list)
+        obj_create = db_http_wrapper(self.obj_create)
+        multi_update = db_http_wrapper(self.obj_update_list)
 
         success = OrderedDict()
         errors = OrderedDict()
@@ -627,7 +641,7 @@ class FlaskSQAResource(FlaskResource):
 
         for filter_expr, value in qs.items():
             custom_filtering_handler = self.custom_filtering.get(filter_expr)
-            if isinstance(custom_filtering_handler, compat.basestring):
+            if isinstance(custom_filtering_handler, six.string_types):
                 custom_filtering_handler = getattr(self,
                                                    custom_filtering_handler)
 

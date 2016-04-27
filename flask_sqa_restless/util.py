@@ -2,14 +2,11 @@
 
 from __future__ import absolute_import
 from __future__ import division
+
 import operator
-from six import wraps
 
 import sqlalchemy as sa
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import class_mapper
-
-from .exceptions import *
 
 
 def multi_getter(obj, *args):
@@ -24,21 +21,6 @@ def capitalize_underscore_string(string):
 def get_mapper_cls_fields(cls):
     return [prop.key for prop in class_mapper(cls).iterate_properties
             if isinstance(prop, sa.orm.ColumnProperty)]
-
-
-def db_http_wrapper(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except IntegrityError as ex:
-            db_error = get_database_error(ex)
-            db_error.raise_http_error()
-
-        except HttpErrorConvertible as ex:
-            ex.raise_http_error()
-
-    return wrapper
 
 
 def convert_value_to_python(value):

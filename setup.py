@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import os
 
+import re
 
 try:
-    from setuptools import setup
+    from setuptools import setup, find_packages
 except ImportError:
     from distutils.core import setup
 
@@ -19,7 +21,7 @@ def get_absolute_path(*args):
 
 def get_version():
     """Get the version of `package` (by extracting it from the source code)."""
-    module_path = get_absolute_path('flas', '__init__.py')
+    module_path = get_absolute_path('flask_sqa_restless', '__init__.py')
     with open(module_path) as handle:
         for line in handle:
             match = re.match(r'^__version__\s*=\s*["\']([^"\']+)["\']$', line)
@@ -29,6 +31,16 @@ def get_version():
 
 
 requirements = [
+    'cached-property==1.3.0',
+    'SQLAlchemy==1.0.12',
+    'Flask==0.10.1',
+    'Flask-SQLAlchemy==2.1',
+    'future==0.15.2',
+    'marshmallow-sqlalchemy==0.8.0',
+    'marshmallow==2.6.0',
+    'PyYAML==3.11',
+    'restless==2.0.1',
+    'six==1.10.0',
 ]
 
 test_requirements = [
@@ -43,9 +55,7 @@ setup(
     author="Ritesh Kadmawala",
     author_email='ritesh@loanzen.in',
     url='https://github.com/loanzen/flask_sqa_restless',
-    packages=[
-        'flask_sqa_restless',
-    ],
+    packages=find_packages(),
     package_dir={'flask_sqa_restless':
                  'flask_sqa_restless'},
     include_package_data=True,
