@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from __future__ import division
 from restless.serializers import JSONSerializer
 
-from restless.utils import json
+from restless.utils import json, MoreTypesJSONEncoder
 
 from .schema import BaseModelSchema
 from .exceptions import get_validation_error
@@ -12,7 +12,7 @@ from .exceptions import get_validation_error
 
 class SimpleJSONSerializer(JSONSerializer):
 
-    def __init__(self, json_encoder):
+    def __init__(self, json_encoder=MoreTypesJSONEncoder):
         self._json_encoder = json_encoder
 
     def serialize(self, data):

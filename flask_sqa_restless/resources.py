@@ -10,7 +10,7 @@ from collections import OrderedDict
 import copy
 
 from flask import make_response, request
-from restless.fl import FlaskResource
+from restless.fl import FlaskResource as BaseFlaskResource
 from restless.utils import format_traceback
 import six
 from six import wraps
@@ -45,55 +45,26 @@ def db_http_wrapper(func):
     return wrapper
 
 
-class FlaskSQAResource(FlaskResource):
-    QUERY_CLASS = djquery.DjangoQuery
-
+class FlaskResource(BaseFlaskResource):
     authentication = Authentication()
-
-    paginator_cls = SQLAlchemyPaginator
-
-    serializer_cls = None
-
-    allow_bulk_insert = False
 
     list_allowed = ALLOWED_METHODS
 
     detail_allowed = ALLOWED_METHODS
 
-    include_fields = []
-
-    exclude_fields = []
-
-    include_fields_deserialize = []
-
-    exclude_fields_deserialize = []
-
-    ordering_allowed = []
-
-    filtering = {}
-
     CUSTOM_APIS = []
 
-    NESTED_API = []
-
     MAX_LIMIT = 100
-
-    detail_uri_identifier = 'pk'
-
-    model = None
-
-    session = None
 
     response_headers = {
         'default': {}
     }
 
+    detail_uri_identifier = 'id'
+
     def __init__(self, *args, **kwargs):
-        self._initialize_serializer()
-        self.nested = kwargs.get('nested', False)
-        self.custom_api = kwargs.get('custom_api', None)
-        self.parent = kwargs.get('parent', None)
-        FlaskResource.__init__(self, *args, **kwargs)
+        self.custom_api = kwargs.pop('custom_api', None)
+        BaseFlaskResource.__init__(self, *args, **kwargs)
 
         self.http_methods = copy.deepcopy(self.http_methods)
         self.status_map = copy.deepcopy(self.status_map)
@@ -101,35 +72,9 @@ class FlaskSQAResource(FlaskResource):
         if self.custom_api:
             self.add_custom_api()
 
-        self._init_query()
-
-    def _initialize_serializer(self):
-        self.serializer = self.serializer_cls(session=self.session)
-        if self.include_fields:
-            self.serializer.include_fields_serialize(self.include_fields)
-        elif self.exclude_fields:
-            self.serializer.exclude_fields_serialize(self.exclude_fields)
-
-        if self.include_fields_deserialize:
-            self.serializer.include_fields_deserialize(self.include_fields_deserialize)
-        elif self.exclude_fields_deserialize:
-            self.serializer.exclude_fields_deserialize(self.exclude_fields_deserialize)
-
-
-    def _init_query(self):
-        mapper = orm.class_mapper(self.model)
-        if mapper:
-            self.query = self.QUERY_CLASS(mapper, session=self.session())
-        else:
-            self.query = None
-
     @classmethod
     def name(cls):
         return cls.__name__.replace('Resource', '').lower()
-
-    @property
-    def fields(self):
-        return util.get_mapper_cls_fields(self.model)
 
     def add_custom_api(self):
         self.http_methods[self.custom_api['name']] = {
@@ -144,8 +89,142 @@ class FlaskSQAResource(FlaskResource):
     def update_http_methods(self, view, accepted_methods):
         methods = dict(self.http_methods[view])
         for method in methods:
-            if not method in accepted_methods:
+            if method not in accepted_methods:
                 del self.http_methods[view][method]
+
+    def request_method(self):
+        if 'X-HTTP-Method-Override' in self.request.headers:
+            return self.request.headers['X-HTTP-Method-Override']
+
+        return BaseFlaskResource.request_method(self)
+
+    def request_querystring(self):
+        return self.request.args.to_dict(flat=False)
+
+    def is_authenticated(self):
+        return self.authentication. \
+            is_authenticated(method=self.request_method(),
+                             endpoint=self.endpoint)
+
+    @classmethod
+    def add_url_rules(cls, app, rule_prefix, endpoint_prefix=None):
+        if cls.list_allowed:
+            app.add_url_rule(
+                rule_prefix,
+                endpoint=cls.build_endpoint_name('list', endpoint_prefix),
+                view_func=cls.as_list(),
+                methods=cls.list_allowed
+            )
+
+        if cls.detail_allowed:
+            app.add_url_rule(
+                rule_prefix + '<%s>/' % cls.detail_uri_identifier,
+                endpoint=cls.build_endpoint_name('detail', endpoint_prefix),
+                view_func=cls.as_detail(),
+                methods=cls.detail_allowed
+            )
+
+        api_list = cls.get_custom_apis()
+
+        for custom_api in api_list:
+            app.add_url_rule(
+                '%s%s' % (rule_prefix, custom_api['url']),
+                endpoint=cls.build_endpoint_name(custom_api['name'],
+                                                 endpoint_prefix),
+                view_func=cls.as_view(custom_api['name'],
+                                      custom_api=custom_api),
+                methods=custom_api['methods']
+            )
+
+    @classmethod
+    def get_custom_apis(cls):
+        return list(cls.CUSTOM_APIS)
+
+    @classmethod
+    def as_view(cls, view_type, *init_args, **init_kwargs):
+        def _wrapper(*args, **kwargs):
+            # Make a new instance so that no state potentially leaks between
+            # instances.
+            inst = cls(*init_args, **init_kwargs)
+            inst.request = request
+
+            if 'custom_api' in init_kwargs:
+                accepted_methods = init_kwargs['custom_api']['methods']
+            else:
+                accepted_methods = inst.list_allowed if view_type == 'list' \
+                    else inst.detail_allowed
+
+            inst.update_http_methods(view_type, accepted_methods)
+
+            return inst.handle(view_type, *args, **kwargs)
+
+        return _wrapper
+
+
+class FlaskSQAResource(FlaskResource):
+    QUERY_CLASS = djquery.DjangoQuery
+
+    authentication = Authentication()
+
+    paginator_cls = SQLAlchemyPaginator
+
+    serializer_cls = None
+
+    serializer = None
+
+    allow_bulk_insert = False
+
+    include_fields = []
+
+    exclude_fields = []
+
+    include_fields_deserialize = []
+
+    exclude_fields_deserialize = []
+
+    ordering_allowed = []
+
+    filtering = {}
+
+    NESTED_API = []
+
+    model = None
+
+    session = None
+
+    response_headers = {
+        'default': {}
+    }
+
+    def __init__(self, *args, **kwargs):
+        self._initialize_serializer()
+        self.nested = kwargs.pop('nested', False)
+        self.parent = kwargs.pop('parent', None)
+        FlaskResource.__init__(self, *args, **kwargs)
+        self._init_query()
+
+    def _initialize_serializer(self):
+        self.serializer = self.serializer_cls(session=self.session)
+        if self.include_fields:
+            self.serializer.include_fields_serialize(self.include_fields)
+        elif self.exclude_fields:
+            self.serializer.exclude_fields_serialize(self.exclude_fields)
+
+        if self.include_fields_deserialize:
+            self.serializer.include_fields_deserialize(self.include_fields_deserialize)
+        elif self.exclude_fields_deserialize:
+            self.serializer.exclude_fields_deserialize(self.exclude_fields_deserialize)
+
+    def _init_query(self):
+        mapper = orm.class_mapper(self.model)
+        if mapper:
+            self.query = self.QUERY_CLASS(mapper, session=self.session())
+        else:
+            self.query = None
+
+    @property
+    def fields(self):
+        return util.get_mapper_cls_fields(self.model)
 
     def build_response(self, data, status=200):
         response = make_response(data, status, {
@@ -164,15 +243,6 @@ class FlaskSQAResource(FlaskResource):
 
         return response
 
-    def request_method(self):
-        if 'X-HTTP-Method-Override' in self.request.headers:
-            return self.request.headers['X-HTTP-Method-Override']
-
-        return FlaskResource.request_method(self)
-
-    def request_querystring(self):
-        return self.request.args.to_dict(flat=False)
-
     def wrap_list_response(self, objects):
         return {
             'meta': self.paginator.get_meta() if self.paginator_cls else {},
@@ -184,7 +254,6 @@ class FlaskSQAResource(FlaskResource):
             return ''
         data = self.serializer.serialize_model(data)
         return FlaskResource.serialize_detail(self, data)
-
 
     def serialize(self, method, endpoint, data):
         qs = self.request_querystring()
@@ -205,11 +274,6 @@ class FlaskSQAResource(FlaskResource):
             return self.serialize_list(data)
 
         return self.serialize_detail(data)
-
-    def is_authenticated(self):
-        return self.authentication. \
-            is_authenticated(method=self.request_method(),
-                             endpoint=self.endpoint)
 
     def build_error(self, err):
         debug = self.is_debug()
@@ -233,24 +297,14 @@ class FlaskSQAResource(FlaskResource):
 
     @classmethod
     def add_url_rules(cls, app, rule_prefix, endpoint_prefix=None):
+        FlaskResource.add_url_rules(cls, app, rule_prefix, endpoint_prefix=None)
+        for nested_api in cls.NESTED_API:
+            cls.add_nested_url_rules(nested_api, app, rule_prefix,
+                                     endpoint_prefix)
 
-        if cls.list_allowed:
-            app.add_url_rule(
-                rule_prefix,
-                endpoint=cls.build_endpoint_name('list', endpoint_prefix),
-                view_func=cls.as_list(),
-                methods=cls.list_allowed
-            )
-
-        if cls.detail_allowed:
-            app.add_url_rule(
-                rule_prefix + '<%s>/' % cls.detail_uri_identifier,
-                endpoint=cls.build_endpoint_name('detail', endpoint_prefix),
-                view_func=cls.as_detail(),
-                methods=cls.detail_allowed
-            )
-
-        api_list = list(cls.CUSTOM_APIS)
+    @classmethod
+    def get_custom_apis(cls):
+        api_list = FlaskResource.get_custom_apis(cls)
 
         api_list.append({
             'url': 'count/',
@@ -265,19 +319,7 @@ class FlaskSQAResource(FlaskResource):
                 'methods': ['POST']
             })
 
-        for custom_api in api_list:
-            app.add_url_rule(
-                '%s%s' % (rule_prefix, custom_api['url']),
-                endpoint=cls.build_endpoint_name(custom_api['name'],
-                                                 endpoint_prefix),
-                view_func=cls.as_view(custom_api['name'],
-                                      custom_api=custom_api),
-                methods=custom_api['methods']
-            )
-
-        for nested_api in cls.NESTED_API:
-            cls.add_nested_url_rules(nested_api, app, rule_prefix,
-                                     endpoint_prefix)
+        return api_list
 
     @classmethod
     def add_nested_url_rules(cls, nested_api, app, rule_prefix,
@@ -339,28 +381,6 @@ class FlaskSQAResource(FlaskResource):
                                           custom_api=custom_api),
                 methods=custom_api['methods']
             )
-
-    @classmethod
-    def as_view(cls, view_type, *init_args, **init_kwargs):
-
-        def _wrapper(*args, **kwargs):
-            # Make a new instance so that no state potentially leaks between
-            # instances.
-            inst = cls(*init_args, **init_kwargs)
-            inst.request = request
-
-            if 'custom_api' in init_kwargs:
-                accepted_methods = init_kwargs['custom_api']['methods']
-            else:
-                accepted_methods = inst.list_allowed if view_type == 'list' \
-                    else inst.detail_allowed
-
-            inst.update_http_methods(view_type, accepted_methods)
-
-            return inst.handle(view_type, *args, **kwargs)
-
-        return _wrapper
-
 
     @classmethod
     def nested_view(cls, nested_resource, view, accepted_methods,
