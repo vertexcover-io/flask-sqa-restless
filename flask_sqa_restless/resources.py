@@ -64,6 +64,10 @@ class FlaskSQAResource(FlaskResource):
 
     exclude_fields = []
 
+    include_fields_deserialize = []
+
+    exclude_fields_deserialize = []
+
     ordering_allowed = []
 
     filtering = {}
@@ -89,13 +93,15 @@ class FlaskSQAResource(FlaskResource):
         self.nested = kwargs.get('nested', False)
         self.custom_api = kwargs.get('custom_api', None)
         self.parent = kwargs.get('parent', None)
-        super().__init__(*args, **kwargs)
+        FlaskResource.__init__(self, *args, **kwargs)
 
         self.http_methods = copy.deepcopy(self.http_methods)
         self.status_map = copy.deepcopy(self.status_map)
         self.response_headers = copy.deepcopy(self.response_headers)
         if self.custom_api:
             self.add_custom_api()
+
+        self._init_query()
 
     def _initialize_serializer(self):
         self.serializer = self.serializer_cls(session=self.session)
@@ -104,13 +110,18 @@ class FlaskSQAResource(FlaskResource):
         elif self.exclude_fields:
             self.serializer.exclude_fields_serialize(self.exclude_fields)
 
-    @property
-    def query(self):
+        if self.include_fields_deserialize:
+            self.serializer.include_fields_deserialize(self.include_fields_deserialize)
+        elif self.exclude_fields_deserialize:
+            self.serializer.exclude_fields_deserialize(self.exclude_fields_deserialize)
+
+
+    def _init_query(self):
         mapper = orm.class_mapper(self.model)
         if mapper:
-            return self.QUERY_CLASS(mapper, session=self.session)
+            self.query = self.QUERY_CLASS(mapper, session=self.session())
         else:
-            return None
+            self.query = None
 
     @classmethod
     def name(cls):
@@ -157,7 +168,7 @@ class FlaskSQAResource(FlaskResource):
         if 'X-HTTP-Method-Override' in self.request.headers:
             return self.request.headers['X-HTTP-Method-Override']
 
-        return super(FlaskSQAResource, self).request_method()
+        return FlaskResource.request_method(self)
 
     def request_querystring(self):
         return self.request.args.to_dict(flat=False)
@@ -167,6 +178,13 @@ class FlaskSQAResource(FlaskResource):
             'meta': self.paginator.get_meta() if self.paginator_cls else {},
             'object': self.serializer.serialize_model(objects)
         }
+
+    def serialize_detail(self, data):
+        if not data:
+            return ''
+        data = self.serializer.serialize_model(data)
+        return FlaskResource.serialize_detail(self, data)
+
 
     def serialize(self, method, endpoint, data):
         qs = self.request_querystring()

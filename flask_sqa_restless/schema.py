@@ -42,8 +42,9 @@ class BaseModelSchemaOpts(ModelSchemaOpts):
         meta.sqla_session = getattr(meta, 'sqla_session', self.DEFAULT_SQLA_SESSION)
         meta.model_converter = getattr(meta, 'model_converter', self.DEFAULT_MODEL_CONVERTER)
         meta.include_fk = getattr(meta, 'include_fk', self.INCLUDE_FK)
-        meta.json_encoder = getattr(meta, 'json_encoder', self.DEFAULT_JSON_ENCODER)
-        super().__init__(meta)
+        ModelSchemaOpts.__init__(self, meta)
+        self.json_encoder = getattr(meta, 'json_encoder',
+                                    self.DEFAULT_JSON_ENCODER)
 
 
 class BaseModelSchema(ModelSchema):
@@ -55,11 +56,11 @@ class BaseModelSchema(ModelSchema):
     def __init__(self, *args, **kwargs):
         kwargs['only'] = ()
         kwargs['exclude'] = ()
-        super().__init__(*args, **kwargs)
+        ModelSchema.__init__(self, *args, **kwargs)
 
     def dumps(self, obj, many=None, update_fields=True, *args, **kwargs):
         kwargs['cls'] = self.opts.json_encoder
-        return super().dumps(obj, many, update_fields, *args, **kwargs)
+        return ModelSchema.dumps(obj, many, update_fields, *args, **kwargs)
 
     def include_fields_serialize(self, include_fields):
         """

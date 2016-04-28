@@ -28,8 +28,8 @@ class SimpleJSONSerializer(JSONSerializer):
 class ModelJSONSerializer(BaseModelSchema, SimpleJSONSerializer):
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        SimpleJSONSerializer.__init__(self.opts.json_encoder)
+        BaseModelSchema.__init__(self, *args, **kwargs)
+        SimpleJSONSerializer.__init__(self, self.opts.json_encoder)
 
     @property
     def model(self):
@@ -37,7 +37,7 @@ class ModelJSONSerializer(BaseModelSchema, SimpleJSONSerializer):
 
     def serialize_model(self, data):
         if isinstance(data, self.model):
-            resp = self.dump(data)
+            resp = self.dump(data).data
 
         elif isinstance(data, dict):
             resp = {}
@@ -47,7 +47,7 @@ class ModelJSONSerializer(BaseModelSchema, SimpleJSONSerializer):
         elif isinstance(data, (list, tuple)):
             if data and isinstance(data[0], self.model):
                 resp = {
-                    'objects': self.dump(data, many=True)
+                    'objects': self.dump(data, many=True).data
                 }
             else:
                 resp = {
@@ -60,7 +60,7 @@ class ModelJSONSerializer(BaseModelSchema, SimpleJSONSerializer):
 
     def deserialize_model(self, obj_dict, **kwargs):
 
-        data, errors = super().load(obj_dict, **kwargs)
+        data, errors = BaseModelSchema.load(self, obj_dict, **kwargs)
         if errors:
             raise get_validation_error(self._parse_validation_error(errors))
 
