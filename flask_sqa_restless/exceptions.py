@@ -40,6 +40,7 @@ class ValidationError(BadRequest):
     """
     Raised when validation error occurs while deserializing mdodel resource
     """
+    pass
 
 
 class HttpErrorConvertible(object):

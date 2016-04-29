@@ -287,8 +287,10 @@ class FlaskSQAResource(FlaskResource):
             err = db_error.get_http_error()
 
         data = {
-            'error': six.text_type(err),
+            'error': getattr(err, 'description', six.string_types(err)),
+            'payload': getattr(err, 'payload', {})
         }
+
         if tb:
             data['traceback'] = tb
 
