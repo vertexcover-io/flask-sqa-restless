@@ -101,10 +101,13 @@ class FlaskResource(BaseFlaskResource):
     def request_querystring(self):
         return self.request.args.to_dict(flat=False)
 
+    def get_view(self):
+        return self.http_methods[self.endpoint][self.request_method()]
+
     def is_authenticated(self):
         return self.authentication. \
             is_authenticated(method=self.request_method(),
-                             endpoint=self.endpoint)
+                             view=self.get_view())
 
     @classmethod
     def add_url_rules(cls, app, rule_prefix, endpoint_prefix=None):
@@ -232,7 +235,7 @@ class FlaskSQAResource(FlaskResource):
                                     'application/json')
         })
 
-        view_name = self.http_methods[self.endpoint][self.request_method()]
+        view_name = self.get_view()
 
         resp_headers = self.response_headers.get(view_name,
                                                  self.response_headers.get(
@@ -437,6 +440,7 @@ class FlaskSQAResource(FlaskResource):
                     )
                 )
 
+            view_method = self.get_view()
             if not self.is_authenticated():
                 raise Unauthorized()
 
@@ -449,7 +453,6 @@ class FlaskSQAResource(FlaskResource):
                                                     resource_uri=self.request.base_url,
                                                     max_limit=self.MAX_LIMIT)
 
-            view_method = getattr(self, self.http_methods[endpoint][method])
             data = view_method(*args, **kwargs)
             serialized = self.serialize(method, endpoint, data)
         except Exception as err:

@@ -11,7 +11,7 @@ class Authentication(object):
     By default, this indicates the user is always authenticated.
     """
 
-    def is_authenticated(self, method, endpoint, **kwargs):
+    def is_authenticated(self, method, view, **kwargs):
         """
         Identifies if the user is authenticated to continue or not.
         Should return either ``True`` if allowed, ``False`` if not or an
