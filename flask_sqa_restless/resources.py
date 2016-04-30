@@ -109,8 +109,13 @@ class FlaskResource(BaseFlaskResource):
             is_authenticated(method=self.request_method(),
                              view=self.get_view())
 
+
     @classmethod
     def add_url_rules(cls, app, rule_prefix, endpoint_prefix=None):
+        cls._add_url_rules(app, rule_prefix, endpoint_prefix)
+
+    @classmethod
+    def _add_url_rules(cls, app, rule_prefix, endpoint_prefix=None):
         if cls.list_allowed:
             app.add_url_rule(
                 rule_prefix,
@@ -189,6 +194,8 @@ class FlaskSQAResource(FlaskResource):
 
     filtering = {}
 
+    custom_filtering = {}
+
     NESTED_API = []
 
     model = None
@@ -249,7 +256,7 @@ class FlaskSQAResource(FlaskResource):
     def wrap_list_response(self, objects):
         return {
             'meta': self.paginator.get_meta() if self.paginator_cls else {},
-            'object': self.serializer.serialize_model(objects)
+            'objects': self.serializer.serialize_model(objects)
         }
 
     def serialize_detail(self, data):
@@ -287,7 +294,7 @@ class FlaskSQAResource(FlaskResource):
             err = db_error.get_http_error()
 
         data = {
-            'error': getattr(err, 'description', six.string_types(err)),
+            'error': getattr(err, 'description', six.text_type(err)),
             'payload': getattr(err, 'payload', {})
         }
 
@@ -302,14 +309,14 @@ class FlaskSQAResource(FlaskResource):
 
     @classmethod
     def add_url_rules(cls, app, rule_prefix, endpoint_prefix=None):
-        FlaskResource.add_url_rules(cls, app, rule_prefix, endpoint_prefix=None)
+        cls._add_url_rules(app, rule_prefix, endpoint_prefix=endpoint_prefix)
         for nested_api in cls.NESTED_API:
             cls.add_nested_url_rules(nested_api, app, rule_prefix,
                                      endpoint_prefix)
 
     @classmethod
     def get_custom_apis(cls):
-        api_list = FlaskResource.get_custom_apis(cls)
+        api_list = list(cls.CUSTOM_APIS)
 
         api_list.append({
             'url': 'count/',
@@ -442,7 +449,6 @@ class FlaskSQAResource(FlaskResource):
                     )
                 )
 
-            view_method = self.get_view()
             if not self.is_authenticated():
                 raise Unauthorized()
 
@@ -455,6 +461,8 @@ class FlaskSQAResource(FlaskResource):
                                                     resource_uri=self.request.base_url,
                                                     max_limit=self.MAX_LIMIT)
 
+            view = self.get_view()
+            view_method = getattr(self, view)
             data = view_method(*args, **kwargs)
             serialized = self.serialize(method, endpoint, data)
         except Exception as err:

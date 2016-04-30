@@ -46,13 +46,9 @@ class ModelJSONSerializer(BaseModelSchema, SimpleJSONSerializer):
 
         elif isinstance(data, (list, tuple)):
             if data and isinstance(data[0], self.model):
-                resp = {
-                    'objects': self.dump(data, many=True).data
-                }
+                resp = self.dump(data, many=True).data
             else:
-                resp = {
-                    'objects': data
-                }
+                resp = data
         else:
             resp = data
 
