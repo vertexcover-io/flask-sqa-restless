@@ -18,7 +18,7 @@ from sqlalchemy import orm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import NoResultFound
 import sys
-from werkzeug.exceptions import Unauthorized, MethodNotAllowed
+from .exceptions import UnAuthorized, MethodNotAllowed
 
 from flask.ext.sqa_restless.djquery import DjangoQuery
 from .authentication import Authentication
@@ -450,7 +450,7 @@ class FlaskSQAResource(FlaskResource):
                 )
 
             if not self.is_authenticated():
-                raise Unauthorized()
+                raise UnAuthorized()
 
             self.data = self.deserialize(method, endpoint, self.request_body())
             self.check_authorization(self.http_methods[endpoint][method],
@@ -523,6 +523,7 @@ class FlaskSQAResource(FlaskResource):
         self.session.add(obj)
         if commit:
             self.session.commit()
+        return obj
 
     def obj_get(self, **filters):
         return self.query.get_or_404(**filters)
@@ -583,7 +584,7 @@ class FlaskSQAResource(FlaskResource):
                     'error': ex.message
                 }
 
-            except Conflict as ex:
+            except HTTPConflict as ex:
                 errors[ind] = {
                     'status': 'failure',
                     'type': 'Conflict',

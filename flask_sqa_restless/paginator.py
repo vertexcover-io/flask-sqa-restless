@@ -5,7 +5,7 @@ from __future__ import division
 from six.moves.urllib.parse import urlencode
 import six
 from cached_property import cached_property
-from werkzeug.exceptions import BadRequest
+from .exceptions import BadRequest
 
 
 class SQLAlchemyPaginator(object):

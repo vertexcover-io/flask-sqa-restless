@@ -3,29 +3,79 @@
 from __future__ import absolute_import
 from __future__ import division
 import re
-from werkzeug.exceptions import BadRequest, Conflict
 
 from . import util
 
 
-def get_formatted_error(error_dict, message, exception_type):
+class HTTPException(Exception):
+    code = None
+    description = None
 
-    msg = "%s: " % message if message else ''
+    def __init__(self, description=None, payload=None, code=None):
+        if description is not None:
+            self.description = description
 
-    for field, err in error_dict.items():
-        msg += '{}: {} '.format(util.capitalize_underscore_string(field), err)
+        Exception.__init__(self, description)
 
-    return exception_type(description=msg)
+        if code is not None:
+            self.code = code
 
-
-def get_validation_error(error_dict, message=None):
-    message = message or 'Validation Error'
-    return get_formatted_error(error_dict, message, exception_type=ValidationError)
+        self.payload = payload
 
 
-def get_conflict_error(error_dict, message=None):
-    message = message or 'Conflict'
-    return get_formatted_error(error_dict, message, exception_type=Conflict)
+class BadRequest(HTTPException):
+    code = 400
+    description = 'Bad Request'
+
+
+class SecurityError(BadRequest):
+
+    """Raised if something triggers a security error.  This is otherwise
+    exactly like a bad request error.
+    """
+
+
+class UnAuthorized(HTTPException):
+    code = 401
+    description = 'Authentication Failed'
+
+
+class PermissionDenied(HTTPException):
+    code = 403
+    description = 'Permission Denied'
+
+
+class NotFound(HTTPException):
+    code = 404
+    description = 'The request Resource is not found'
+
+
+class MethodNotAllowed(HTTPException):
+    code = 405
+    description = 'The method is not allowed for the requested URL.'
+
+
+class RequestTimeout(HTTPException):
+    code = 408
+    description = 'Request Timeout'
+
+
+class HTTPConflict(HTTPException):
+    code = 409
+    description = (
+        'A conflict happened while processing the request. The resource might '
+        'have been modified while the request was being processed.'
+    )
+
+
+class Gone(HTTPException):
+    code = 410
+    description = 'Request URL is no longer available'
+
+
+class ServerError(HTTPException):
+    code = 500
+    description = 'Server Error. Something went wrong'
 
 
 class InvalidFilterError(BadRequest):
@@ -40,12 +90,12 @@ class ValidationError(BadRequest):
     """
     Raised when validation error occurs while deserializing mdodel resource
     """
-    pass
+    description = 'Validation Error'
 
 
 class HttpErrorConvertible(object):
     def get_http_error(self):
-        return Exception(self.message)
+        return HTTPException(description=self.message)
 
     def raise_http_error(self):
         raise self.get_http_error()
@@ -87,18 +137,14 @@ class BaseConstraintError(DatabaseError):
 
 class UniqueConstraintError(BaseConstraintError):
 
-    MESSAGE_FORMAT = "A record with this field(s) {0} " \
-                     "already exists"
+    MESSAGE_FORMAT = "A record with this {0} already exists"
 
     def __init__(self, integrity_error):
         self.column, self.value = self.parse_column(integrity_error.orig.diag)
         super(UniqueConstraintError, self).__init__(integrity_error)
 
     def format_error(self):
-        if self.column and self.value:
-            arg = "%s('%s')" % (self.column, self.value)
-            return self.MESSAGE_FORMAT.format(arg)
-        elif self.column:
+        if self.column:
             return self.MESSAGE_FORMAT.format(self.column)
 
         else:
@@ -106,7 +152,7 @@ class UniqueConstraintError(BaseConstraintError):
 
     def get_http_error(self):
         error_dict = {self.column: self.message}
-        return get_conflict_error(error_dict)
+        return HTTPConflict(payload=error_dict)
 
 
 class NotNullError(DatabaseError):
@@ -122,7 +168,7 @@ class NotNullError(DatabaseError):
 
     def get_http_error(self):
         error_dict = {self.column: self.message}
-        get_validation_error(error_dict)
+        raise ValidationError(payload=error_dict)
 
 
 class ForeignKeyConstraintError(BaseConstraintError):
@@ -138,7 +184,7 @@ class ForeignKeyConstraintError(BaseConstraintError):
 
     def get_http_error(self):
         error_dict = {self.column: self.message}
-        return get_conflict_error(error_dict)
+        return HTTPConflict(payload=error_dict)
 
 
 POSTGRESS_ERROR_MAP = {

@@ -7,7 +7,7 @@ from restless.serializers import JSONSerializer
 from restless.utils import json, MoreTypesJSONEncoder
 
 from .schema import BaseModelSchema
-from .exceptions import get_validation_error
+from .exceptions import ValidationError
 
 
 class SimpleJSONSerializer(JSONSerializer):
@@ -58,7 +58,7 @@ class ModelJSONSerializer(BaseModelSchema, SimpleJSONSerializer):
 
         data, errors = BaseModelSchema.load(self, obj_dict, **kwargs)
         if errors:
-            raise get_validation_error(self._parse_validation_error(errors))
+            raise ValidationError(payload=self._parse_validation_error(errors))
 
         return data
 

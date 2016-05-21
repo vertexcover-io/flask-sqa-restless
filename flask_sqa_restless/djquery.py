@@ -9,27 +9,11 @@ from sqlalchemy.orm.base import _entity_descriptor
 
 # Taken from https://github.com/mitsuhiko/sqlalchemy-django-query
 from sqlalchemy.orm.exc import NoResultFound
-from werkzeug.exceptions import abort, NotFound
-
-"""
-    sqlalchemy_django_query
-    ~~~~~~~~~~~~~~~~~~~~~~~
-    A module that implements a more Django like interface for SQLAlchemy
-    query objects.  It's still API compatible with the regular one but
-    extends it with Djangoisms.
-    Example queries::
-        Post.query.filter_by(pub_date__year=2008)
-        Post.query.exclude_by(id=42)
-        User.query.filter_by(name__istartswith='e')
-        Post.query.filter_by(blog__name__exact='something')
-        Post.query.order_by('-blog__name')
-    :copyright: 2011 by Armin Ronacher, Mike Bayer.
-    license: BSD, see LICENSE for more details.
-"""
 from sqlalchemy.orm import joinedload, joinedload_all, Query
 from sqlalchemy.util import to_list
 from sqlalchemy.sql import operators, extract
 
+from .exceptions import NotFound
 
 class DjangoQueryMixin(object):
     """Can be mixed into any Query class of SQLAlchemy and extends it to
