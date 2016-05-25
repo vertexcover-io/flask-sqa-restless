@@ -93,6 +93,11 @@ class ValidationError(BadRequest):
     description = 'Validation Error'
 
 
+class MethodNotImplemented(HTTPException):
+    status = 501
+    msg = "The specified HTTP method is not implemented."
+
+
 class HttpErrorConvertible(object):
     def get_http_error(self):
         return HTTPException(description=self.message)

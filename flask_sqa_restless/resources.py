@@ -10,6 +10,7 @@ from collections import OrderedDict
 import copy
 
 from flask import make_response, request
+from restless.constants import *
 from restless.fl import FlaskResource as BaseFlaskResource
 from restless.utils import format_traceback
 import six
@@ -20,7 +21,7 @@ from sqlalchemy.orm.exc import NoResultFound
 import sys
 from .exceptions import UnAuthorized, MethodNotAllowed
 
-from flask.ext.sqa_restless.djquery import DjangoQuery
+from .djquery import DjangoQuery
 from .authentication import Authentication
 from .paginator import SQLAlchemyPaginator
 from .exceptions import *
@@ -61,6 +62,35 @@ class FlaskResource(BaseFlaskResource):
     }
 
     detail_uri_identifier = 'id'
+
+    status_map = {
+        'list': OK,
+        'detail': OK,
+        'create': CREATED,
+        'update': ACCEPTED,
+        'patch': ACCEPTED,
+        'delete': NO_CONTENT,
+        'update_list': ACCEPTED,
+        'create_detail': CREATED,
+        'delete_list': NO_CONTENT,
+        'patch_list': ACCEPTED,
+    }
+    http_methods = {
+        'list': {
+            'GET': 'list',
+            'POST': 'create',
+            'PUT': 'update_list',
+            'DELETE': 'delete_list',
+            'PATCH': 'patch_list',
+        },
+        'detail': {
+            'GET': 'detail',
+            'POST': 'create_detail',
+            'PUT': 'update',
+            'DELETE': 'delete',
+            'PATCH': 'patch'
+        }
+    }
 
     def __init__(self, *args, **kwargs):
         self.custom_api = kwargs.pop('custom_api', None)
@@ -108,6 +138,12 @@ class FlaskResource(BaseFlaskResource):
         return self.authentication. \
             is_authenticated(method=self.request_method(),
                              view=self.get_view())
+
+    def patch(self, *args, **kwargs):
+        raise MethodNotImplemented()
+
+    def patch_list(self, *args, **kwargs):
+        raise MethodNotImplemented()
 
 
     @classmethod
@@ -493,7 +529,11 @@ class FlaskSQAResource(FlaskResource):
 
     @db_http_wrapper
     def update(self, *args, **kwargs):
-        return self.obj_update(self.data, **kwargs)
+        return self.obj_update(self.data, partial=False, **kwargs)
+
+    @db_http_wrapper
+    def patch(self, *args, **kwargs):
+        return self.obj_update(self.data, partial=True, **kwargs)
 
     @db_http_wrapper
     def delete(self, *args, **kwargs):
@@ -537,9 +577,9 @@ class FlaskSQAResource(FlaskResource):
         query = self.apply_pagination(query)
         return query.all()
 
-    def obj_update(self, data, commit=True, **filters):
+    def obj_update(self, data, commit=True, partial=False, **filters):
         existing_obj = self.obj_get(**filters)
-        new_object = self.load_model(data, partial=True)
+        new_object = self.load_model(data, partial=partial)
         if not new_object.id:
             new_object.id = existing_obj.id
 
