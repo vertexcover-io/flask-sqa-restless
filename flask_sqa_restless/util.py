@@ -4,6 +4,7 @@ from __future__ import absolute_import
 from __future__ import division
 
 import operator
+import inspect
 
 import sqlalchemy as sa
 from sqlalchemy.orm import class_mapper
@@ -36,3 +37,9 @@ def convert_value_to_python(value):
         value = None
 
     return value
+
+
+def get_primary_keys(cls_or_instance):
+    cls = cls_or_instance.__class__ if not inspect.isclass(cls_or_instance) \
+        else cls_or_instance
+    return [key.name for key in sa.inspect(cls).primary_key]

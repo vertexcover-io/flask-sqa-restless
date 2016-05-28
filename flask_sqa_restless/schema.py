@@ -37,6 +37,13 @@ class BaseModelConverter(ModelConverter):
         """
         if column.nullable:
             kwargs['allow_none'] = True
+        else:
+            kwargs['allow_none'] = False
+
+            if hasattr(column.type, 'length'):
+                kwargs['validate'].append(validate.Length(min=1,
+                                                          error="This field is required"))
+
         kwargs['required'] = not column.nullable and not _has_default(column)
 
         self._add_data_type_kwargs(kwargs, column.type)

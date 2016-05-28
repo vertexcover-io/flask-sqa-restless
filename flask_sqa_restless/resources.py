@@ -580,8 +580,9 @@ class FlaskSQAResource(FlaskResource):
     def obj_update(self, data, commit=True, partial=False, **filters):
         existing_obj = self.obj_get(**filters)
         new_object = self.load_model(data, partial=partial)
-        if not new_object.id:
-            new_object.id = existing_obj.id
+        for pk in util.get_primary_keys(new_object):
+            if not getattr(new_object, pk):
+                setattr(new_object, pk, getattr(existing_obj, pk))
 
         updated_object = self.session.merge(new_object)
         if commit:
