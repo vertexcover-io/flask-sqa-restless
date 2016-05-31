@@ -328,6 +328,8 @@ class FlaskSQAResource(FlaskResource):
         if isinstance(err, IntegrityError):
             db_error = get_database_error(err)
             err = db_error.get_http_error()
+        elif isinstance(err, HttpErrorConvertible):
+          err = err.get_http_error()
 
         data = {
             'error': getattr(err, 'description', six.text_type(err)),

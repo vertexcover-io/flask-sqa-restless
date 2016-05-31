@@ -94,34 +94,37 @@ class ValidationError(BadRequest):
 
 
 class MethodNotImplemented(HTTPException):
-    status = 501
-    msg = "The specified HTTP method is not implemented."
+    code = 501
+    description = "The specified HTTP method is not implemented."
 
 
 class HttpErrorConvertible(object):
+    code = 500
+    description = "Something Went Wrong"
+
     def get_http_error(self):
-        return HTTPException(description=self.message)
+        return HTTPException(description=self.description, code=self.code)
 
     def raise_http_error(self):
         raise self.get_http_error()
+
+    def __repr__(self):
+        return self.description
 
 
 class DatabaseError(Exception, HttpErrorConvertible):
 
     def __init__(self, integrity_error):
         self.error = integrity_error
-        self.message = self.format_error()
+        self.description = self.format_error()
         self.error_code = self.error.orig.pgcode
         super(DatabaseError, self).__init__(self.format_error())
-
-    def __repr__(self):
-        return self.message
 
     def format_error(self):
         return self.error.orig.diag.message_primary
 
     def get_http_error(self):
-        return BadRequest(self.message)
+        return BadRequest(self.description)
 
     def error_type(self):
         return self.__class__.__name__
@@ -172,7 +175,7 @@ class NotNullError(DatabaseError):
         return self.MESSAGE_FORMAT.format(self.column)
 
     def get_http_error(self):
-        error_dict = {self.column: self.message}
+        error_dict = {self.column: self.description}
         raise ValidationError(payload=error_dict)
 
 
@@ -188,8 +191,8 @@ class ForeignKeyConstraintError(BaseConstraintError):
         return self.MESSAGE_FORMAT.format(self.error.orig.diag.message_detail)
 
     def get_http_error(self):
-        error_dict = {self.column: self.message}
-        return HTTPConflict(payload=error_dict)
+        error_dict = {self.column: self.description}
+        return BadRequest(payload=error_dict)
 
 
 POSTGRESS_ERROR_MAP = {
