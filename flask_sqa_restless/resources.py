@@ -700,7 +700,7 @@ class FlaskSQAResource(FlaskResource):
             filter_parts = field.split('__')
             field_name = filter_parts[0]
 
-            if field_name not in self.schema.fields and field_name not in self.model.relationships():
+            if field_name not in self.serializer.fields and field_name not in self.model.relationships():
                 raise BadRequest("No matching '%s' field for ordering on."
                                  % field_name)
 
