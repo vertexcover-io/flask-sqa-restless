@@ -35,6 +35,7 @@ class DjangoQueryMixin(object):
         'contains': operators.contains_op,
         'icontains': lambda c, x: c.ilike('%' + x.replace('%', '%%') + '%'),
         'in': operators.in_op,
+        'notin': operators.notin_op,
         'exact': operators.eq,
         'iexact': operators.ilike_op,
         'startswith': operators.startswith_op,
