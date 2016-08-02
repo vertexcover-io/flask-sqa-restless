@@ -66,13 +66,12 @@ class ModelJSONSerializer(BaseModelSchema, SimpleJSONSerializer):
         errors_dict = {}
         for field, error in errors.items():
             field = "{}.{}".format(field_prefix, field) if field_prefix else field
-            if isinstance(error, dict):
-                errors_dict.update(self._parse_validation_error(error))
+            if isinstance(error, (tuple, list)):
+                errors_dict[field] = ", ".join(error)
+            elif isinstance(error, dict):
+                errors_dict[field] = self._parse_validation_error(error)
             else:
-                if isinstance(error, (tuple, list)):
-                    errors_dict[field] = ", ".join(error)
-                else:
-                    errors_dict[field] = error
+                errors_dict[field] = error
 
         return errors_dict
 

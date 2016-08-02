@@ -176,7 +176,7 @@ class NotNullError(DatabaseError):
 
     def get_http_error(self):
         error_dict = {self.column: self.description}
-        raise ValidationError(payload=error_dict)
+        return ValidationError(payload=error_dict)
 
 
 class ForeignKeyConstraintError(BaseConstraintError):
