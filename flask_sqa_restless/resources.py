@@ -9,6 +9,7 @@ from __future__ import absolute_import, division, print_function
 from collections import OrderedDict
 import copy
 
+from celery import current_app
 from flask import make_response, request
 from restless.constants import *
 from restless.fl import FlaskResource as BaseFlaskResource
@@ -261,7 +262,7 @@ class FlaskSQAResource(FlaskResource):
         elif self.exclude_fields_deserialize:
             self.serializer.exclude_fields_deserialize(self.exclude_fields_deserialize)
 
-    def     _init_query(self):
+    def _init_query(self):
         mapper = orm.class_mapper(self.model)
         if mapper:
             self.query = self.QUERY_CLASS(mapper, session=self.session())
@@ -320,6 +321,9 @@ class FlaskSQAResource(FlaskResource):
             return self.serialize_list(data)
 
         return self.serialize_detail(data)
+
+    def bubble_exceptions(self):
+        return current_app.debug
 
     def build_error(self, err):
         debug = self.is_debug()
