@@ -261,7 +261,7 @@ class FlaskSQAResource(FlaskResource):
         elif self.exclude_fields_deserialize:
             self.serializer.exclude_fields_deserialize(self.exclude_fields_deserialize)
 
-    def _init_query(self):
+    def     _init_query(self):
         mapper = orm.class_mapper(self.model)
         if mapper:
             self.query = self.QUERY_CLASS(mapper, session=self.session())
@@ -581,16 +581,14 @@ class FlaskSQAResource(FlaskResource):
 
     def obj_update(self, data, commit=True, partial=False, **filters):
         existing_obj = self.obj_get(**filters)
-        new_object = self.load_model(data, partial=partial)
-        for pk in util.get_primary_keys(new_object):
-            if not getattr(new_object, pk):
-                setattr(new_object, pk, getattr(existing_obj, pk))
+        self.load_model(data, partial=partial)
+        for key, value in data.iteritems():
+            setattr(existing_obj, key, value)
 
-        updated_object = self.session.merge(new_object)
         if commit:
             self.session.commit()
 
-        return updated_object
+        return existing_obj
 
     def obj_delete(self, commit=True, **filters):
         obj = self.obj_get(**filters)
