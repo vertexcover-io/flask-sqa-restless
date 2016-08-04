@@ -6,11 +6,12 @@ https://github.com/django-tastypie/django-tastypie/blob/master/tastypie/resource
 """
 
 from __future__ import absolute_import, division, print_function
+
+import traceback
 from collections import OrderedDict
 import copy
 
-from celery import current_app
-from flask import make_response, request
+from flask import make_response, request, current_app
 from restless.constants import *
 from restless.fl import FlaskResource as BaseFlaskResource
 from restless.utils import format_traceback
@@ -323,7 +324,7 @@ class FlaskSQAResource(FlaskResource):
         return self.serialize_detail(data)
 
     def bubble_exceptions(self):
-        return current_app.debug
+        return False
 
     def build_error(self, err):
         debug = self.is_debug()
@@ -342,6 +343,8 @@ class FlaskSQAResource(FlaskResource):
 
         if tb:
             data['traceback'] = tb
+
+        traceback.print_exc()
 
         body = self.serializer.serialize(data)
 
