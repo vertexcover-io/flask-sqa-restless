@@ -118,7 +118,7 @@ class DatabaseError(Exception, HttpErrorConvertible):
         self.error = integrity_error
         self.description = self.format_error()
         self.error_code = self.error.orig.pgcode
-        super(DatabaseError, self).__init__(self.format_error())
+        super(DatabaseError, self).__init__(self.description)
 
     def format_error(self):
         return self.error.orig.diag.message_primary
@@ -128,6 +128,9 @@ class DatabaseError(Exception, HttpErrorConvertible):
 
     def error_type(self):
         return self.__class__.__name__
+
+    def __repr__(self):
+        return self.description
 
 
 class BaseConstraintError(DatabaseError):
@@ -160,7 +163,8 @@ class UniqueConstraintError(BaseConstraintError):
 
     def get_http_error(self):
         error_dict = {self.column: self.message}
-        return HTTPConflict(payload=error_dict)
+        return HTTPConflict(description=self.description,
+                            payload=error_dict)
 
 
 class NotNullError(DatabaseError):
@@ -176,7 +180,8 @@ class NotNullError(DatabaseError):
 
     def get_http_error(self):
         error_dict = {self.column: self.description}
-        return ValidationError(payload=error_dict)
+        return ValidationError(description=self.description,
+                               payload=error_dict)
 
 
 class ForeignKeyConstraintError(BaseConstraintError):
@@ -192,7 +197,8 @@ class ForeignKeyConstraintError(BaseConstraintError):
 
     def get_http_error(self):
         error_dict = {self.column: self.description}
-        return BadRequest(payload=error_dict)
+        return BadRequest(description=self.description,
+                          payload=error_dict)
 
 
 POSTGRESS_ERROR_MAP = {

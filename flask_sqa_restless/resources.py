@@ -7,27 +7,26 @@ https://github.com/django-tastypie/django-tastypie/blob/master/tastypie/resource
 
 from __future__ import absolute_import, division, print_function
 
+import copy
+import sys
 import traceback
 from collections import OrderedDict
-import copy
 
-from flask import make_response, request, current_app
+import six
+from flask import make_response, request
 from restless.constants import *
 from restless.fl import FlaskResource as BaseFlaskResource
 from restless.utils import format_traceback
-import six
 from six import wraps
 from sqlalchemy import orm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import NoResultFound
-import sys
-from .exceptions import UnAuthorized, MethodNotAllowed
 
-from .djquery import DjangoQuery
-from .authentication import Authentication
-from .paginator import SQLAlchemyPaginator
-from .exceptions import *
 from . import util, djquery
+from .authentication import Authentication
+from .djquery import DjangoQuery
+from .exceptions import *
+from .paginator import SQLAlchemyPaginator
 
 
 ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
@@ -46,6 +45,22 @@ def db_http_wrapper(func):
             ex.raise_http_error()
 
     return wrapper
+
+
+def with_session(func):
+    @wraps(func)
+    def _wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            if len(args) >= 1 and isinstance(args[0], FlaskSQAResource):
+                session = args[0].session
+                if session and not session.is_active:
+                    session.rollback()
+
+            raise
+
+    return _wrapper
 
 
 class FlaskResource(BaseFlaskResource):
@@ -326,15 +341,17 @@ class FlaskSQAResource(FlaskResource):
     def bubble_exceptions(self):
         return False
 
-    def build_error(self, err):
+    def build_error(self, error):
         debug = self.is_debug()
         tb = format_traceback(sys.exc_info()) if debug else None
 
-        if isinstance(err, IntegrityError):
-            db_error = get_database_error(err)
+        if isinstance(error, IntegrityError):
+            db_error = get_database_error(error)
             err = db_error.get_http_error()
-        elif isinstance(err, HttpErrorConvertible):
-          err = err.get_http_error()
+        elif isinstance(error, HttpErrorConvertible):
+            err = error.get_http_error()
+        else:
+            err = error
 
         data = {
             'error': getattr(err, 'description', six.text_type(err)),
@@ -344,13 +361,16 @@ class FlaskSQAResource(FlaskResource):
         if tb:
             data['traceback'] = tb
 
-        traceback.print_exc()
-
         body = self.serializer.serialize(data)
 
         status = getattr(err, 'code', 500)
 
+        self.log_error(error, status, data)
+
         return self.build_response(body, status=status)
+
+    def log_error(self, error, status, data):
+        pass
 
     @classmethod
     def add_url_rules(cls, app, rule_prefix, endpoint_prefix=None):
@@ -519,35 +539,43 @@ class FlaskSQAResource(FlaskResource):
     def check_authorization(self, view_method, data, *args, **kwargs):
         return True
 
+    @with_session
     @db_http_wrapper
     def create(self, *args, **kwargs):
         return self.obj_create(self.data)
 
+    @with_session
     @db_http_wrapper
     def list(self, *args, **kwargs):
         return self.obj_get_list(**kwargs)
 
+    @with_session
     @db_http_wrapper
     def count(self, *args, **kwargs):
         count = self.obj_get_list(count_only=True, **kwargs)
         return {'total_count': count}
 
+    @with_session
     @db_http_wrapper
     def detail(self, *args, **kwargs):
         return self.obj_get(**kwargs)
 
+    @with_session
     @db_http_wrapper
     def update(self, *args, **kwargs):
         return self.obj_update(self.data, partial=False, **kwargs)
 
+    @with_session
     @db_http_wrapper
     def patch(self, *args, **kwargs):
         return self.obj_update(self.data, partial=True, **kwargs)
 
+    @with_session
     @db_http_wrapper
     def delete(self, *args, **kwargs):
         self.obj_delete(**kwargs)
 
+    @with_session
     @db_http_wrapper
     def create_or_update(self, *args, **kwargs):
         return self.obj_create_or_update(self.data, **kwargs)
