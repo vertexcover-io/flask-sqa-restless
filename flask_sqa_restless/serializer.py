@@ -2,6 +2,10 @@
 
 from __future__ import absolute_import
 from __future__ import division
+
+from copy import deepcopy
+
+from marshmallow import fields
 from restless.serializers import JSONSerializer
 
 from restless.utils import json, MoreTypesJSONEncoder
@@ -55,12 +59,21 @@ class ModelJSONSerializer(BaseModelSchema, SimpleJSONSerializer):
         return resp
 
     def deserialize_model(self, obj_dict, **kwargs):
+        if kwargs.get('partial'):
+            self._nest_partial_fields()
 
         data, errors = BaseModelSchema.load(self, obj_dict, **kwargs)
         if errors:
             raise ValidationError(payload=self._parse_validation_error(errors))
 
         return data
+
+    def _nest_partial_fields(self):
+        for field_name, field in self.fields.items():
+            if isinstance(field, fields.Nested):
+                new_field = deepcopy(field)
+                new_field.schema.partial = True
+                self.fields[field_name] = new_field
 
     def _parse_validation_error(self, errors, field_prefix=None):
         errors_dict = {}
