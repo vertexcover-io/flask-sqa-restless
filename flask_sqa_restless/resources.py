@@ -53,14 +53,24 @@ def with_session(func):
         try:
             return func(*args, **kwargs)
         except Exception:
-            if len(args) >= 1 and isinstance(args[0], FlaskSQAResource):
-                session = args[0].session
-                if session and not session.is_active:
-                    session.rollback()
+            if hasattr(func, 'im_self'):
+                resource = func.im_self
+            elif len(args) >= 1 and isinstance(args[0], FlaskSQAResource):
+                resource = args[0]
+            else:
+                raise
+
+            session = resource.session
+            if session and not session.is_active:
+                session.rollback()
 
             raise
 
     return _wrapper
+
+
+def db_http_wrapper_with_session(func):
+    return db_http_wrapper(with_session(func))
 
 
 class FlaskResource(BaseFlaskResource):
@@ -539,44 +549,36 @@ class FlaskSQAResource(FlaskResource):
     def check_authorization(self, view_method, data, *args, **kwargs):
         return True
 
-    @with_session
-    @db_http_wrapper
+    @db_http_wrapper_with_session
     def create(self, *args, **kwargs):
         return self.obj_create(self.data)
 
-    @with_session
-    @db_http_wrapper
+    @db_http_wrapper_with_session
     def list(self, *args, **kwargs):
         return self.obj_get_list(**kwargs)
 
-    @with_session
-    @db_http_wrapper
+    @db_http_wrapper_with_session
     def count(self, *args, **kwargs):
         count = self.obj_get_list(count_only=True, **kwargs)
         return {'total_count': count}
 
-    @with_session
-    @db_http_wrapper
+    @db_http_wrapper_with_session
     def detail(self, *args, **kwargs):
         return self.obj_get(**kwargs)
 
-    @with_session
-    @db_http_wrapper
+    @db_http_wrapper_with_session
     def update(self, *args, **kwargs):
         return self.obj_update(self.data, partial=False, **kwargs)
 
-    @with_session
-    @db_http_wrapper
+    @db_http_wrapper_with_session
     def patch(self, *args, **kwargs):
         return self.obj_update(self.data, partial=True, **kwargs)
 
-    @with_session
-    @db_http_wrapper
+    @db_http_wrapper_with_session
     def delete(self, *args, **kwargs):
         self.obj_delete(**kwargs)
 
-    @with_session
-    @db_http_wrapper
+    @db_http_wrapper_with_session
     def create_or_update(self, *args, **kwargs):
         return self.obj_create_or_update(self.data, **kwargs)
 
@@ -638,8 +640,8 @@ class FlaskSQAResource(FlaskResource):
         return data.get('id', None) is not None
 
     def _bulk_save(self, op_name, object_list):
-        obj_create = db_http_wrapper(self.obj_create)
-        multi_update = db_http_wrapper(self.obj_update_list)
+        obj_create = db_http_wrapper_with_session(self.obj_create)
+        multi_update = db_http_wrapper_with_session(self.obj_update_list)
 
         success = OrderedDict()
         errors = OrderedDict()
