@@ -7,6 +7,8 @@ import operator
 import inspect
 
 import sqlalchemy as sa
+from sqlalchemy.inspection import inspect as sqa_inspect
+
 from sqlalchemy.orm import class_mapper
 
 
@@ -43,3 +45,7 @@ def get_primary_keys(cls_or_instance):
     cls = cls_or_instance.__class__ if not inspect.isclass(cls_or_instance) \
         else cls_or_instance
     return [key.name for key in sa.inspect(cls).primary_key]
+
+
+def get_model_relationship_names(model):
+    return sqa_inspect(model).relationships.keys()
