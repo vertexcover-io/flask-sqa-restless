@@ -27,6 +27,7 @@ from .authentication import Authentication
 from .djquery import DjangoQuery
 from .exceptions import *
 from .paginator import SQLAlchemyPaginator
+from .util import get_model_relationship_names
 
 
 ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
@@ -735,7 +736,8 @@ class FlaskSQAResource(FlaskResource):
             filter_parts = field.split('__')
             field_name = filter_parts[0]
 
-            if field_name not in self.serializer.fields and field_name not in self.model.relationships():
+            model_relationships = get_model_relationship_names(self.model)
+            if field_name not in self.serializer.fields and field_name not in model_relationships:
                 raise BadRequest("No matching '%s' field for ordering on."
                                  % field_name)
 
@@ -790,7 +792,8 @@ class FlaskSQAResource(FlaskResource):
                 complete_field = filter_bits[0]
 
             field_name = complete_field.split('__')[0]
-            if field_name not in self.fields and field_name not in self.model.relationships():
+            model_relationships = get_model_relationship_names(self.model)
+            if field_name not in self.fields and field_name not in model_relationships:
                 continue
 
             self.check_filtering(complete_field, filter_type)
