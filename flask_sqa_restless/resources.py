@@ -798,7 +798,7 @@ class FlaskSQAResource(FlaskResource):
 
             self.check_filtering(complete_field, filter_type)
 
-            if filter_type  not in ('in', 'notin') and isinstance(value, (list, tuple)):
+            if filter_type not in ('in', 'notin', 'range') and isinstance(value, (list, tuple)):
                 value = value[0]
 
             value = util.convert_value_to_python(value)
