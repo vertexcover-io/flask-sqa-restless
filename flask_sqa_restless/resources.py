@@ -619,9 +619,9 @@ class FlaskSQAResource(FlaskResource):
 
     def obj_update(self, data, commit=True, partial=False, **filters):
         existing_obj = self.obj_get(**filters)
-        self.load_model(data, partial=partial)
+        new_obj = self.load_model(data, partial=partial)
         for key, value in data.iteritems():
-            setattr(existing_obj, key, value)
+            setattr(existing_obj, key, getattr(new_obj, key, value))
 
         if commit:
             self.session.commit()
