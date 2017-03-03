@@ -35,29 +35,12 @@ class BaseModelConverter(ModelConverter):
         """Add keyword arguments to kwargs (in-place) based on the passed in
         `Column <sqlalchemy.schema.Column>`.
         """
-        if column.nullable:
-            kwargs['allow_none'] = True
-        else:
-            kwargs['allow_none'] = False
 
-            if hasattr(column.type, 'length'):
-                kwargs['validate'].append(validate.Length(min=1,
-                                                          error="This field is required"))
-
-        kwargs['required'] = not column.nullable and not _has_default(column)
-
+        super(BaseModelConverter, self)._add_column_kwargs(kwargs, column)
         self._add_data_type_kwargs(kwargs, column.type)
 
     def _add_data_type_kwargs(self, kwargs, data_type):
-        if hasattr(data_type, 'enums'):
-            kwargs['validate'].append(validate.OneOf(choices=data_type.enums))
-
-        # Add a length validator if a max length is set on the column
-        if hasattr(data_type, 'length'):
-            kwargs['validate'].append(validate.Length(max=data_type.length))
-
-        if hasattr(data_type, 'scale'):
-            kwargs['places'] = getattr(data_type, 'scale', None)
+        pass
 
     def get_field_for_data_type(self, data_type, **kwargs):
         field_class = self._get_field_class_for_data_type(data_type)

@@ -32,12 +32,12 @@ def get_version():
 
 requirements = [
     'cached-property==1.3.0',
-    'SQLAlchemy==1.0.12',
-    'Flask==0.10.1',
+    'SQLAlchemy==1.1.6',
+    'Flask==0.12',
     'Flask-SQLAlchemy==2.1',
     'future==0.15.2',
-    'marshmallow-sqlalchemy==0.8.0',
-    'marshmallow==2.6.0',
+    'marshmallow-sqlalchemy==0.12.1',
+    'marshmallow==2.13.0',
     'PyYAML==3.11',
     'restless==2.0.1',
     'six==1.10.0',
