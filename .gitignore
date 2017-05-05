@@ -44,6 +44,8 @@ docs/_build
 
 # Virtualenvs
 env/
+venv/
+ENV/
 
 
 #Pycharm
