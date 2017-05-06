@@ -9,7 +9,6 @@ from __future__ import absolute_import, division, print_function
 
 import copy
 import sys
-import traceback
 from collections import OrderedDict
 
 import six
@@ -22,13 +21,12 @@ from sqlalchemy import orm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import NoResultFound
 
-from . import util, djquery
+from . import djquery
 from .authentication import Authentication
 from .djquery import DjangoQuery
 from .exceptions import *
 from .paginator import SQLAlchemyPaginator
 from .util import get_model_relationship_names
-
 
 ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
@@ -124,9 +122,9 @@ class FlaskResource(BaseFlaskResource):
         self.custom_api = kwargs.pop('custom_api', None)
         BaseFlaskResource.__init__(self, *args, **kwargs)
 
-        self.http_methods = copy.deepcopy(self.http_methods)
-        self.status_map = copy.deepcopy(self.status_map)
-        self.response_headers = copy.deepcopy(self.response_headers)
+        self.http_methods = copy.deepcopy(self.__class__.http_methods)
+        self.status_map = copy.deepcopy(self.__class__.status_map)
+        self.response_headers = copy.deepcopy(self.__class__.response_headers)
         if self.custom_api:
             self.add_custom_api()
 
