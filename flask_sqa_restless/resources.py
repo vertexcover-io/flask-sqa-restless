@@ -246,12 +246,18 @@ class FlaskSQAResource(FlaskResource):
 
     allow_bulk_insert = False
 
+    # controller to include only specific fields for serialization.
+    # by default, all fields are serialized.
     include_fields = []
 
+    # controller to exclude specific fields from serialization.
     exclude_fields = []
 
+    # controller to include only specific fields for deserialization.
+    # by default, all fields are deserialized.
     include_fields_deserialize = []
 
+    # controller to exclude specific fields from deserialization.
     exclude_fields_deserialize = []
 
     ordering_allowed = []
