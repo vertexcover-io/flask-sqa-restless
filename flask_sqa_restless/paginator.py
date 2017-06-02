@@ -25,13 +25,13 @@ class SQLAlchemyPaginator(object):
         :param dict request_data: A dictionary like object that might provide
         ``limit`` and/or ``offset`` to override the defaults. Commonly provide by
          ``request.args`` (required)
-        :param query: SqlAlchemy ``Query`` object (required)
         :param resource_uri: uri for the resource. Used to construct next and previous uri
         :param int max_limit: An upper bound to limit. Defaults to ``MAX_LIMIT``
         :return:
         """
         self.request_data = request_data
         self.resource_uri = resource_uri
+        self.query = None
         self.max_limit = [max_limit or self.MAX_LIMIT]
 
     @cached_property

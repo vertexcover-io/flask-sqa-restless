@@ -244,18 +244,12 @@ class FlaskSQAResource(FlaskResource):
 
     allow_bulk_insert = False
 
-    # controller to include only specific fields for serialization.
-    # by default, all fields are serialized.
     include_fields = []
 
-    # controller to exclude specific fields from serialization.
     exclude_fields = []
 
-    # controller to include only specific fields for deserialization.
-    # by default, all fields are deserialized.
     include_fields_deserialize = []
 
-    # controller to exclude specific fields from deserialization.
     exclude_fields_deserialize = []
 
     ordering_allowed = []
@@ -264,6 +258,14 @@ class FlaskSQAResource(FlaskResource):
 
     custom_filtering = {}
 
+    """
+        {
+            'resource': '<resource class or full qualified name>',
+            'url_prefix': '<url prefix for nested resource>',
+            'list_allowed': '<list of HTTP Methods allowed for collection>',
+            'detail_allowed': '<list of HTTP Methods allowed for detail>'
+        }
+    """
     NESTED_API = []
 
     model = None
@@ -277,7 +279,7 @@ class FlaskSQAResource(FlaskResource):
     def __init__(self, *args, **kwargs):
         self._initialize_serializer()
         self.nested = kwargs.pop('nested', False)
-        self.parent = kwargs.pop('parent', None)
+        self.parent_filter = kwargs.pop('parent_filter', None)
         FlaskResource.__init__(self, *args, **kwargs)
         self._init_query()
 
@@ -297,6 +299,8 @@ class FlaskSQAResource(FlaskResource):
         mapper = orm.class_mapper(self.model)
         if mapper:
             self.query = self.QUERY_CLASS(mapper, session=self.session())
+            if self.parent_filter:
+                self.query = self.query.filter_by(**self.parent_filter)
         else:
             self.query = None
 
@@ -417,44 +421,51 @@ class FlaskSQAResource(FlaskResource):
     def add_nested_url_rules(cls, nested_api, app, rule_prefix,
                              endpoint_prefix=None):
 
+        if 'resource' not in nested_api or 'url_prefix' not in nested_api:
+            raise ValueError('Nested API Spec must define the `resource` and `url_prefix`')
+
         resource = nested_api['resource']
+        parent_identifier = nested_api['parent_identifier']
+        parent_filter = nested_api.get('parent_filter', None)
         if isinstance(resource, six.string_types):
             resource = util.import_class(resource)
 
-        nested_prefix = "%s<%s>/%s/" % (rule_prefix, nested_api['identifier'],
-                                        nested_api['prefix'])
-        if nested_api['list']:
+        nested_prefix = "%s<%s>/%s/" % (rule_prefix, parent_identifier,
+                                        nested_api['url_prefix'])
+        if nested_api.get('list_allowed', None):
             api_name = "%s_list" % resource.name()
             app.add_url_rule(
                 nested_prefix,
                 endpoint=cls.build_endpoint_name(api_name,
                                                  endpoint_prefix),
                 view_func=cls.nested_view(resource, 'list',
-                                          nested_api['list'],
-                                          nested_api['identifier']),
-                methods=nested_api['list']
+                                          nested_api['list_allowed'],
+                                          parent_filter,
+                                          parent_identifier),
+                methods=nested_api['list_allowed']
             )
 
-        if nested_api['detail']:
+        if nested_api.get('detail_allowed', None):
             api_name = "%s_detail" % resource.name()
             app.add_url_rule(
                 '%s<%s>/' % (nested_prefix, resource.detail_uri_identifier),
                 endpoint=cls.build_endpoint_name(api_name,
                                                  endpoint_prefix),
                 view_func=cls.nested_view(resource, 'detail',
-                                          nested_api['detail'],
-                                          nested_api['identifier']),
-                methods=nested_api['detail']
+                                          nested_api['detail_allowed'],
+                                          parent_filter,
+                                          parent_identifier),
+                methods=nested_api['detail_allowed']
             )
 
-        custom_apis = nested_api['custom_apis']
+        custom_apis = nested_api.get('custom_apis', [])
         custom_apis.append({
             'url': 'count/',
             'name': 'count',
             'methods': ['GET']
         })
 
-        if nested_api['allow_bulk_insert']:
+        if nested_api.get('allow_bulk_insert', False):
             custom_apis.append({
                 'url': 'bulk_insert/',
                 'name': 'bulk_insert',
@@ -469,27 +480,33 @@ class FlaskSQAResource(FlaskResource):
                                                  endpoint_prefix),
                 view_func=cls.nested_view(resource, custom_api['name'],
                                           custom_api['methods'],
-                                          nested_api['identifier'],
+                                          parent_filter,
+                                          parent_identifier,
                                           custom_api=custom_api),
                 methods=custom_api['methods']
             )
 
     @classmethod
     def nested_view(cls, nested_resource, view, accepted_methods,
-                    parent_identifier, *init_args, **init_kwargs):
+                    parent_filter, parent_identifier,
+                    *init_args, **init_kwargs):
 
         def _wrapper(*args, **kwargs):
             # Make a new instance so that no state potentially leaks between
             # instances.
+            parent_ident = kwargs.pop(parent_identifier, None)
 
-            init_kwargs['parent'] = cls.model.query.get_or_404(**{
-                cls.detail_uri_identifier: kwargs[parent_identifier]
-            })
-            init_kwargs['nested'] = True
+            if parent_filter:
+                init_kwargs['parent_filter'] = parent_filter(parent_ident)
+
             inst = nested_resource(*init_args, **init_kwargs)
-            inst.update_http_methods(view, accepted_methods)
-            inst.request = request
-            return inst.handle(view, *args, **kwargs)
+            try:
+                inst.nested = True
+                inst.request = request
+                inst.update_http_methods(view, accepted_methods)
+                return inst.handle(view, *args, **kwargs)
+            except Exception as ex:
+                inst.handle_error(ex)
 
         return _wrapper
 
