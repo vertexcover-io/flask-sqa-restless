@@ -26,7 +26,7 @@ from .authentication import Authentication
 from .djquery import DjangoQuery
 from .exceptions import *
 from .paginator import SQLAlchemyPaginator
-from .util import get_model_relationship_names
+from .util import get_model_relationship_names, Final
 
 ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
@@ -70,6 +70,27 @@ def with_session(func):
 
 def db_http_wrapper_with_session(func):
     return db_http_wrapper(with_session(func))
+
+
+def ensure_nested_view(parent_resource):
+
+    def _decorator(view):
+
+        @wraps(view)
+        def _wrapper(resource, *args, **kwargs):
+            parent_relation = resource.parent_relation
+            if not getattr(resource, 'nested') or \
+                    not parent_relation or parent_resource != parent_relation.resource:
+
+                raise NotFound(
+                    'This view must be nested within a parent resource'
+                    ': {}'.format(parent_resource.name())
+                )
+            return view(resource, *args, **kwargs)
+
+        return _wrapper
+
+    return _decorator
 
 
 class FlaskResource(BaseFlaskResource):
@@ -136,7 +157,7 @@ class FlaskResource(BaseFlaskResource):
         self.http_methods[self.custom_api['name']] = {
             method: self.custom_api['name']
             for method in self.custom_api['methods']
-        }
+            }
 
         if self.custom_api.get('status_code'):
             self.status_map[self.custom_api['name']] = \
@@ -170,7 +191,6 @@ class FlaskResource(BaseFlaskResource):
 
     def patch_list(self, *args, **kwargs):
         raise MethodNotImplemented()
-
 
     @classmethod
     def add_url_rules(cls, app, rule_prefix, endpoint_prefix=None):
@@ -279,9 +299,7 @@ class FlaskSQAResource(FlaskResource):
     def __init__(self, *args, **kwargs):
         self._initialize_serializer()
         self.nested = kwargs.pop('nested', False)
-        if self.nested:
-            self.parent_identifier = kwargs['parent_identifier']
-            self.parent_filter = kwargs.pop('parent_filter', None)
+        self.parent_relation = kwargs['parent'] if self.nested else None
         FlaskResource.__init__(self, *args, **kwargs)
         self._init_query()
 
@@ -293,16 +311,18 @@ class FlaskSQAResource(FlaskResource):
             self.serializer.exclude_fields_serialize(self.exclude_fields)
 
         if self.include_fields_deserialize:
-            self.serializer.include_fields_deserialize(self.include_fields_deserialize)
+            self.serializer.include_fields_deserialize(
+                self.include_fields_deserialize)
         elif self.exclude_fields_deserialize:
-            self.serializer.exclude_fields_deserialize(self.exclude_fields_deserialize)
+            self.serializer.exclude_fields_deserialize(
+                self.exclude_fields_deserialize)
 
     def _init_query(self):
         mapper = orm.class_mapper(self.model)
         if mapper:
             self.query = self.QUERY_CLASS(mapper, session=self.session())
-            if self.parent_filter:
-                self.query = self.query.filter_by(**self.parent_filter)
+            if self.parent_relation and self.parent_relation.filter:
+                self.query = self.query.filter_by(**self.parent_relation.filter)
         else:
             self.query = None
 
@@ -424,7 +444,8 @@ class FlaskSQAResource(FlaskResource):
                              endpoint_prefix=None):
 
         if 'resource' not in nested_api or 'url_prefix' not in nested_api:
-            raise ValueError('Nested API Spec must define the `resource` and `url_prefix`')
+            raise ValueError(
+                'Nested API Spec must define the `resource` and `url_prefix`')
 
         resource = nested_api['resource']
         parent_identifier = nested_api['parent_identifier']
@@ -435,6 +456,7 @@ class FlaskSQAResource(FlaskResource):
         nested_prefix = "%s<%s>/%s/" % (rule_prefix, parent_identifier,
                                         nested_api['url_prefix'])
         if nested_api.get('list_allowed', None):
+
             api_name = "%s_list" % resource.name()
             app.add_url_rule(
                 nested_prefix,
@@ -496,16 +518,16 @@ class FlaskSQAResource(FlaskResource):
         def _wrapper(*args, **kwargs):
             # Make a new instance so that no state potentially leaks between
             # instances.
-            parent_ident = kwargs.pop(parent_identifier, None)
+            parent_ident_value = kwargs.pop(parent_identifier, None)
 
-            init_kwargs['parent_identifier'] = parent_ident
+            parent = ParentRelation(cls, parent_identifier, parent_ident_value,
+                                    parent_filter)
 
-            if parent_filter:
-                init_kwargs['parent_filter'] = parent_filter(parent_ident)
+            init_kwargs['nested'] = True
+            init_kwargs['parent'] = parent
 
             inst = nested_resource(*init_args, **init_kwargs)
             try:
-                inst.nested = True
                 inst.request = request
                 inst.update_http_methods(view, accepted_methods)
                 return inst.handle(view, *args, **kwargs)
@@ -577,7 +599,7 @@ class FlaskSQAResource(FlaskResource):
 
     @db_http_wrapper_with_session
     def create(self, *args, **kwargs):
-        return self.obj_create(self.data)
+        return self.obj_create(self.data, **kwargs)
 
     @db_http_wrapper_with_session
     def list(self, *args, **kwargs):
@@ -623,7 +645,7 @@ class FlaskSQAResource(FlaskResource):
         except NoResultFound:
             return self.obj_create(data)
 
-    def obj_create(self, data, commit=True):
+    def obj_create(self, data, commit=True, **kwargs):
         obj = self.load_model(data)
         self.session.add(obj)
         if commit:
@@ -823,10 +845,27 @@ class FlaskSQAResource(FlaskResource):
 
             self.check_filtering(complete_field, filter_type)
 
-            if filter_type not in ('in', 'notin', 'range') and isinstance(value, (list, tuple)):
+            if filter_type not in ('in', 'notin', 'range') and isinstance(value,
+                                                                          (list,
+                                                                           tuple)):
                 value = value[0]
 
             value = util.convert_value_to_python(value)
             filters[filter_expr] = value
 
         return query.filter_by(**filters) if filters else query
+
+
+class ParentRelation(six.with_metaclass(Final)):
+    
+    def __init__(self, resource,  identifier_key, identifier_value, filter_=None):
+        self.resource = resource
+        self.identifier_key = identifier_key
+        self.identifier_value = identifier_value
+        self.filter = filter_(identifier_value) if filter_ else None
+
+    def get_object(self):
+        field = getattr(self.resource.model,
+                        self.resource.detail_uri_identifier)
+
+        return self.resource.model.query.filter(field == self.identifier_value).one()

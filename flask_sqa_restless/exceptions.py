@@ -7,6 +7,7 @@ import re
 from . import util
 
 
+
 class HTTPException(Exception):
     code = None
     description = None

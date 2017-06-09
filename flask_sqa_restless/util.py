@@ -77,3 +77,15 @@ def import_class(cls_path):
                 module_path, class_name))
 
     return cls
+
+
+class Final(type):
+    """
+    Taken from: https://stackoverflow.com/a/2826746/911557
+    A metaclass that prevents classes using it to be inherited from
+    """
+    def __new__(cls, name, bases, classdict):
+        for b in bases:
+            if isinstance(b, Final):
+                raise TypeError("type '{0}' is not an acceptable base type".format(b.__name__))
+        return type.__new__(cls, name, bases, dict(classdict))
