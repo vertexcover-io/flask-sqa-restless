@@ -279,7 +279,9 @@ class FlaskSQAResource(FlaskResource):
     def __init__(self, *args, **kwargs):
         self._initialize_serializer()
         self.nested = kwargs.pop('nested', False)
-        self.parent_filter = kwargs.pop('parent_filter', None)
+        if self.nested:
+            self.parent_identifier = kwargs['parent_identifier']
+            self.parent_filter = kwargs.pop('parent_filter', None)
         FlaskResource.__init__(self, *args, **kwargs)
         self._init_query()
 
@@ -495,6 +497,8 @@ class FlaskSQAResource(FlaskResource):
             # Make a new instance so that no state potentially leaks between
             # instances.
             parent_ident = kwargs.pop(parent_identifier, None)
+
+            init_kwargs['parent_identifier'] = parent_ident
 
             if parent_filter:
                 init_kwargs['parent_filter'] = parent_filter(parent_ident)
