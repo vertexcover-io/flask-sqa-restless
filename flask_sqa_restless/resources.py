@@ -645,7 +645,7 @@ class FlaskSQAResource(FlaskResource):
         except NoResultFound:
             return self.obj_create(data)
 
-    def obj_create(self, data, commit=True, **kwargs):
+    def obj_create(self, data, commit=True):
         obj = self.load_model(data)
         self.session.add(obj)
         if commit:
