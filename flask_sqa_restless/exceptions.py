@@ -140,7 +140,7 @@ class BaseConstraintError(DatabaseError):
 
     @classmethod
     def parse_column(cls, error):
-        match = cls.RE_ERROR_MESSAGE.search(error.message_detail)
+        match = cls.RE_ERROR_MESSAGE.search(error.message_detail or '')
         if match:
             return match.groups()
         else:
@@ -216,3 +216,8 @@ def get_database_error(integrity_error):
         return error_cls(integrity_error)
     else:
         return DatabaseError(integrity_error)
+
+
+def register_db_error_handler(handler_dict):
+    global POSTGRESS_ERROR_MAP
+    POSTGRESS_ERROR_MAP.update(handler_dict)
