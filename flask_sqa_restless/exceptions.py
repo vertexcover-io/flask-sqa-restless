@@ -91,7 +91,15 @@ class ValidationError(BadRequest):
     """
     Raised when validation error occurs while deserializing mdodel resource
     """
-    description = 'Validation Error'
+
+    def __init__(self, description=None, payload=None, code=None):
+        if not description:
+            errors = ', '.join(['{}: {}'.format(field, err)
+                                for field, err in payload.items()])
+
+            description = 'Validation Error - {}'.format(errors)
+
+        super(ValidationError, self).__init__(description, payload, code)
 
 
 class MethodNotImplemented(HTTPException):
