@@ -304,6 +304,13 @@ class FlaskSQAResource(FlaskResource):
         self._init_query()
 
     def _initialize_serializer(self):
+        self.include_fields = copy.deepcopy(self.__class__.include_fields)
+        self.exclude_fields = copy.deepcopy(self.__class__.exclude_fields)
+        self.include_fields_deserialize = copy.deepcopy(
+            self.__class__.include_fields_deserialize)
+        self.exclude_fields_deserialize = copy.deepcopy(
+            self.__class__.exclude_fields_deserialize)
+
         self.serializer = self.serializer_cls(session=self.session)
         if self.include_fields:
             self.serializer.include_fields_serialize(self.include_fields)
@@ -652,11 +659,17 @@ class FlaskSQAResource(FlaskResource):
             self.session.commit()
         return obj
 
+    def get_detail_query(self):
+        return self.query
+
     def obj_get(self, **filters):
-        return self.query.get_or_404(**filters)
+        return self.get_detail_query().get_or_404(**filters)
+
+    def get_list_query(self):
+        return self.query
 
     def obj_get_list(self, count_only=False, **kwargs):
-        query = self.query
+        query = self.get_list_query()
         query = self.apply_filtering(query, **kwargs)
         query = self.apply_sorting(query)
         if count_only:
